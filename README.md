@@ -7,6 +7,6 @@ simpler.
 
 # TODO
 
-- Track document order for dicts and inline dics.
+- Track document order for dicts and inline dicts.
 - Official test suite.
 - Dumping code.
