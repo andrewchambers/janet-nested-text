@@ -1,0 +1,3 @@
+[submodule "nestedtext_tests"]
+	path = test/nestedtext_tests
+	url = https://github.com/KenKundert/nestedtext_tests

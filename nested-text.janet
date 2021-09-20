@@ -28,16 +28,22 @@
     (choice :1byte-rune :2byte-rune :3byte-rune :4byte-rune)
 
     # helpers
+    :inline-ws (any (set " \t\f\v"))
     :indent
     (cmt (capture (any " ")) ,length)
+    :nl (choice "\r\n" "\n" "\r")
     :eol
-    (choice "\n" (not 1))
-    :key
-    (sequence (capture (any (if-not ":" :rune))) ":")
+    (choice :nl (not 1))
     :not-eol
-    (sequence (not "\n") :rune)
+    (if-not :nl :rune)
     :rest
     (sequence (capture (any :not-eol)) :eol)
+    :post-tag (choice (sequence " " :rest)
+                      (sequence :eol (constant "")))
+    :kv-key
+    (cmt (capture (any (if-not (choice :kv-value :nl) :rune))) ,string/trimr)
+    :kv-value
+    (sequence ":" :post-tag)
 
     # inline types
     :inline-dict-string
@@ -51,13 +57,13 @@
     :inline-array-values
     (opt (sequence :inline-array-value (any (sequence "," :inline-array-value))))
     :inline-array
-    (cmt (sequence "[" :inline-array-values "]") ,array)
+    (cmt (sequence :inline-ws "[" :inline-array-values "]" :inline-ws) ,array)
     :inline-key-value
     (sequence :inline-dict-string ":" :inline-dict-value)
     :inline-key-values
     (opt (sequence :inline-key-value (any (sequence "," :inline-key-value))))
     :inline-dict
-    (cmt (sequence "{" :inline-key-values "}") ,table)
+    (cmt (sequence :inline-ws "{" :inline-key-values "}" :inline-ws) ,table)
 
     # classify lines    
     :line
@@ -66,20 +72,30 @@
         (line)
         :indent
         (choice
-          (cmt (sequence "#" :rest) ,(fn [value] @{:kind :comment :value value}))
-          (cmt (sequence "-" :eol) ,(fn [&] @{:kind :list...}))
-          (cmt (sequence "- " :rest) ,(fn [value] @{:kind :list-value :value value}))
-          (cmt (sequence "> " :rest) ,(fn [value] @{:kind :multi-string :value value}))
+          (cmt (sequence ">" :post-tag)
+               ,(fn [v] @{:kind :multi-string :value v}))
+          (cmt (sequence ":" :post-tag)
+               ,(fn [v] @{:kind :multi-key :key v}))
+          (cmt (sequence "-" :post-tag)
+               ,(fn [v]
+                  @{:kind (if (empty? v) :list... :list-value)
+                    :value v}))
+          (cmt (sequence "#" :post-tag) ,(fn [v] @{:kind :comment :value v}))
           (if (set "[{")
             (choice
-              (cmt (sequence :inline-array :eol) ,(fn [value] @{:kind :inline-list :value value}))
-              (cmt (sequence :inline-dict :eol) ,(fn [value] @{:kind :inline-dict :value value}))
-              (cmt :rest ,(fn [value] @{:kind :malformed-inline-value :value value}))))
-          (cmt (sequence :key :eol) ,(fn [key] @{:kind :key... :key key}))
-          (cmt (sequence :key " " :rest) ,(fn [key value] @{:kind :key-value :key key :value value}))
+              (cmt (sequence :inline-array :eol) ,(fn [v] @{:kind :inline-list :value v}))
+              (cmt (sequence :inline-dict :eol) ,(fn [v] @{:kind :inline-dict :value v}))
+              (cmt :rest ,(fn [v] @{:kind :malformed-inline-value :value v}))))
+
+          (cmt (sequence :kv-key :kv-value) ,(fn [k v]
+                                               @{:kind (if (empty? v) :key... :key-value)
+                                                 :key k
+                                                 :value v}))
+
           (cmt :eol ,(fn [] @{:kind :blank}))
           (cmt :rest ,(fn [value] @{:kind :malformed-line :value value}))))
-      ,|(do (put $2 :line $0)
+      ,|(do
+          (put $2 :line $0)
           (put $2 :indent $1)
           $2))
     :main
@@ -121,43 +137,47 @@
      (%start document)
      (document () _
                (list) ,identity
-               (dict) ,identity)
+               (dict) ,identity
+               (inline-value) ,identity
+               (multi-string) ,identity)
 
      (multi-string (:multi-string) ,|(buffer/push-string @"" ($0 :value))
                    (multi-string :multi-string) ,|(do (buffer/push-string $0 "\n")
                                                     (buffer/push-string $0 ($1 :value))))
 
+     (inline-value (:inline-list) ,|($0 :value)
+                   (:inline-dict) ,|($0 :value))
+
      (value (list) ,identity
             (dict) ,identity
-            (:inline-list) ,|($0 :value)
-            (:inline-dict) ,|($0 :value)
+            (inline-value) ,identity
             (multi-string) ,string)
 
      (list-item (:list-value) ,|($0 :value)
+                (:list...) ,|($0 :value)
                 (:list... :indent value :dedent) ,(fn [_ _ $2 _] $2))
 
      (list (list-item) ,array
            (list list-item) ,|(array/push $0 $1))
 
-     (multi-key (:key...) ,|($0 :key)
-                (multi-key :key...) ,|(string $0 "\n" ($1 :key)))
+     (multi-key (:multi-key) ,|($0 :key)
+                (multi-key :multi-key) ,|(string $0 "\n" ($1 :key)))
 
      (dict-item (:key-value) ,|[($0 :key) ($0 :value)]
-                (multi-key :key-value) ,|[(string $0 "\n" ($1 :key)) ($1 :value)]
+                (:key...) ,|[($0 :key) ""]
+                (:key... :indent value :dedent) ,(fn [$0 _ $2 _] [($0 :key) $2])
+                (multi-key) ,|[$0 ""]
                 (multi-key :indent value :dedent) ,(fn [$0 _ $2 _] [$0 $2]))
 
      (dict (dict-item) ,|@{($0 0) ($0 1)}
            (dict dict-item) ,|(put $0 ($1 0) ($1 1)))))
 
-# (setdyn :yydebug stderr)
+#(setdyn :yydebug stderr)
 (def parser-tables (yacc/compile parser-grammar))
 
 (defn decode
   [prog]
   (def tokens (tokenize prog))
-  #(print "===")
-  #(pp tokens)
-  #(print "===")
   (yacc/parse parser-tables tokens))
 
 (defn- prin-indent
@@ -167,9 +187,25 @@
     (buffer/push-string buf " "))
   (prin buf))
 
-(var print-linev nil)
+(var- print-linev nil)
 
-(defn print-dict
+(defn- should-use-multiline
+  [s]
+  # This is inefficient.
+  # We should split unicode runes and
+  # look for these characters.
+  (or (empty? s)
+      (string/has-prefix? " " s)
+      (string/find "\n" s)
+      (string/find "\r" s)
+      (string/find ":" s)
+      (string/find "#" s)
+      (string/find "-" s)
+      (string/find ">" s)
+      (string/find "{" s)
+      (string/find "[" s)))
+
+(defn- print-dict
   [d depth]
   (if (empty? d)
     (do
@@ -178,7 +214,7 @@
     (each k (sorted (keys d))
       (def v (d k))
       (def sk (if (bytes? k) k (string k)))
-      (if (string/find "\n" sk)
+      (if (should-use-multiline sk)
         (do
           (var first true)
           (each line (string/split "\n" sk)
@@ -186,13 +222,14 @@
               (print))
             (set first false)
             (prin-indent depth)
-            (prin line ":")))
+            (prin ": " line))
+          (print-linev v depth true))
         (do
           (prin-indent depth)
-          (prin sk ":")))
-      (print-linev v depth))))
+          (prin sk ":")
+          (print-linev v depth false))))))
 
-(defn print-indexed
+(defn- print-indexed
   [ind depth]
   (if (empty? ind)
     (do
@@ -203,10 +240,16 @@
       (prin "-")
       (print-linev v depth))))
 
+(defn- print-multiline-string
+  [s depth]
+  (each line (string/split "\n" s)
+    (prin-indent depth)
+    (print "> " line)))
+
 (set
   print-linev
   (fn print-linev
-    [v depth]
+    [v depth &opt force-multiline]
     (cond
       (indexed? v)
       (do
@@ -217,15 +260,14 @@
         (print)
         (print-dict v (+ depth 2)))
       (and (bytes? v)
-           (not (string/find "\n" v)))
+           (not force-multiline)
+           (not (should-use-multiline v)))
       (print " " v)
       (bytes? v)
       (do
         (print)
-        (each line (string/split "\n" v)
-          (prin-indent (+ depth 2))
-          (print "> " line)))
-      (print-linev (string v) depth))))
+        (print-multiline-string v (+ depth 2)))
+      (print-linev (string v) depth force-multiline))))
 
 (defn print
   [v &opt depth]
@@ -233,7 +275,10 @@
   (cond
     (dictionary? v)
     (print-dict v depth)
-    (indexed? (print-indexed v depth))))
+    (indexed? v)
+    (print-indexed v depth)
+    (bytes? v)
+    (print-multiline-string v depth)))
 
 (defn encode
   [v &opt depth]
@@ -241,11 +286,3 @@
   (with-dyns [:out buf]
     (print v depth))
   buf)
-
-# (prin (encode ~{:a :b :c :d}))
-# TODO test suite.
-#(pp (parse ```
-#-
-#  {a: 2, c: 3}
-#```))
-
