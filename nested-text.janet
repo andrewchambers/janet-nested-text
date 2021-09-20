@@ -33,7 +33,7 @@
     :eol
     (choice "\n" (not 1))
     :key
-    (sequence (capture (some (sequence (not ":") :rune))) ":")
+    (sequence (capture (any (if-not  ":" :rune))) ":")
     :not-eol
     (sequence (not "\n") :rune)
     :rest
@@ -85,7 +85,6 @@
 
 (defn- tokenize
   [text]
-  (var lineno 0)
   (def tokens @[])
   (def indents @[""])
   (each line (peg/match tokenizer text)
@@ -96,19 +95,19 @@
         -1
         (do
           (while (< (length indent) (length (last indents)))
-            (array/push tokens {:kind :dedent})
+            (array/push tokens @{:kind :dedent :line (token :line)})
             (array/pop indents))
           (array/push tokens token))
         1
         (do
           (array/push indents indent)
-          (array/push tokens {:kind :indent})
+          (array/push tokens @{:kind :indent :line (token :line)})
           (array/push tokens token))
         0
         (array/push tokens token))))
 
   (for i 0 (dec (length indents))
-    (array/push tokens {:kind :dedent}))
+    (array/push tokens @{:kind :dedent :line ((last tokens) :line)}))
 
   tokens)
 
@@ -130,7 +129,7 @@
             (multi-string) ,string)
 
      (list-item (:list-value) ,|($0 :value)
-                (:list... :indent value :dedent) ,(fn [_ _ $3 _] $3))
+                (:list... :indent value :dedent) ,(fn [_ _ $2 _] $2))
 
      (list (list-item) ,array
            (list list-item) ,|(array/push $0 $1))
