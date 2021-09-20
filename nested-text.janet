@@ -76,7 +76,9 @@
           (cmt (sequence :key " " :rest) ,(fn [key rest] @{:kind :key-value :key key :value rest}))
           (cmt :eol ,(fn [] @{:kind :blank}))
           (cmt :rest ,(fn [rest] @{:kind :bad-line :value rest}))))
-      ,|(do (put $2 :line $0) [$1 $2]))
+      ,|(do (put $2 :line $0)
+            (put $2 :indent $1)
+            $2))
     :main
     (sequence (any :line) (not 1))})
 
@@ -87,8 +89,8 @@
   [text]
   (def tokens @[])
   (def indents @[0])
-  (each line (peg/match tokenizer text)
-    (def [indent token] line)
+  (each token (peg/match tokenizer text)
+    (def indent (token :indent))
     (unless (or (= (token :kind) :blank)
                 (= (token :kind) :comment))
       (case (cmp indent (last indents))
