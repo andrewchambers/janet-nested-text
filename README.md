@@ -5,6 +5,16 @@ A janet implementation of [NestedText](https://nestedtext.org).
 For context, NestedText is an alternative to Yaml that aims to be
 simpler.
 
-# TODO
+## Example
 
-- Track document order for dicts and inline dicts.
+```
+> (import nested-text)
+> (nested-text/decode (slurp "example/example.nt"))
+[:ok @{"president" @{"name" ...} ...}]
+
+> (nested-text/print ["a" "b" ["c"]])
+- a
+- b
+-
+  - c
+```
