@@ -25,10 +25,10 @@
                (os/stat dump-out))
       (print "dump test...")
       (def json (json/decode (slurp dump-in)))
-      (def wrapped-json [:ok (freeze (if (= json :null) nil json))])
+      (def json (if (= json :null) nil json))
       (def dumped-bytes (string (nested-text/encode json)))
       (def dumped (freeze (nested-text/decode dumped-bytes)))
       (def nt (freeze (nested-text/decode (slurp dump-out))))
-      (unless (= wrapped-json nt)
-        (errorf "%p\n!=\n%p\n!=\n%p\n======\n%q"
-                wrapped-json nt dumped dumped-bytes)))))
+      (unless (= dumped nt)
+        (errorf "%p\n!=\n%p\n======\n%s"
+                nt dumped dumped-bytes)))))
