@@ -13,13 +13,12 @@
 (import yacc)
 
 (def- tokenizer-grammar
-  ~{
-    # utf8 runes
+  ~{# utf8 runes
     :rune-extra
     (range "\x80\xBF")
     :1byte-rune
     (range "\x00\x7F")
-    :2byte-rune 
+    :2byte-rune
     (sequence (range "\xC0\xDF") :rune-extra)
     :3byte-rune
     (sequence (range "\xE0\xEF") :rune-extra :rune-extra)
@@ -39,7 +38,7 @@
     (sequence (not "\n") :rune)
     :rest
     (sequence (capture (any :not-eol)) :eol)
-    
+
     # inline types
     :inline-dict-string
     (cmt (capture (any (if-not (set "[]{}:,\n") 1))) ,string/trim)
@@ -67,20 +66,19 @@
         (line)
         :indent
         (choice
-                (cmt (sequence "#" :rest) ,(fn [value] @{:kind :comment :value value}))
-                (cmt (sequence "-" :eol) ,(fn [&] @{:kind :list...}))
-                (cmt (sequence "- " :rest) ,(fn [value] @{:kind :list-value :value value}))
-                (cmt (sequence "> " :rest) ,(fn [value] @{:kind :multi-string :value value}))
-                (cmt (sequence :inline-array :eol) ,(fn [value] @{:kind :inline-list :value value}))
-                (cmt (sequence :inline-dict :eol) ,(fn [value] @{:kind :inline-dict :value value}))
-                (cmt (sequence :key :eol) ,(fn [key] @{:kind :key... :key key}))
-                (cmt (sequence :key " " :rest) ,(fn [key rest] @{:kind :key-value :key key :value rest}))
-                (cmt :eol ,(fn [] @{:kind :blank}))
-                (cmt :rest ,(fn [rest] @{:kind :bad-line :value rest}))))
+          (cmt (sequence "#" :rest) ,(fn [value] @{:kind :comment :value value}))
+          (cmt (sequence "-" :eol) ,(fn [&] @{:kind :list...}))
+          (cmt (sequence "- " :rest) ,(fn [value] @{:kind :list-value :value value}))
+          (cmt (sequence "> " :rest) ,(fn [value] @{:kind :multi-string :value value}))
+          (cmt (sequence :inline-array :eol) ,(fn [value] @{:kind :inline-list :value value}))
+          (cmt (sequence :inline-dict :eol) ,(fn [value] @{:kind :inline-dict :value value}))
+          (cmt (sequence :key :eol) ,(fn [key] @{:kind :key... :key key}))
+          (cmt (sequence :key " " :rest) ,(fn [key rest] @{:kind :key-value :key key :value rest}))
+          (cmt :eol ,(fn [] @{:kind :blank}))
+          (cmt :rest ,(fn [rest] @{:kind :bad-line :value rest}))))
       ,|(do (put $2 :line $0) [$1 $2]))
     :main
-    (sequence (any :line) (not 1))
-    })
+    (sequence (any :line) (not 1))})
 
 (def- tokenizer
   (peg/compile tokenizer-grammar))
@@ -108,10 +106,10 @@
           (array/push tokens token))
         0
         (array/push tokens token))))
-  
+
   (for i 0 (dec (length indents))
     (array/push tokens {:kind :dedent}))
-  
+
   tokens)
 
 (def parser-grammar
@@ -120,10 +118,10 @@
      (document () _
                (list) ,identity
                (dict) ,identity)
-     
+
      (multi-string (:multi-string) ,|(buffer/push-string @"" ($0 :value))
                    (multi-string :multi-string) ,|(do (buffer/push-string $0 "\n")
-                                                      (buffer/push-string $0 ($1 :value))))
+                                                    (buffer/push-string $0 ($1 :value))))
 
      (value (list) ,identity
             (dict) ,identity
@@ -158,8 +156,9 @@
   #(print "===")
   (yacc/parse parser-tables tokens))
 
-# TODO test dir.
+# TODO test suite.
 #(pp (parse ```
 #-
-#  [1,{a: 2, c}]
+#  [1,{a: 2, c: 3}]
 #```))
+
