@@ -33,7 +33,7 @@
     :eol
     (choice "\n" (not 1))
     :key
-    (sequence (capture (any (if-not  ":" :rune))) ":")
+    (sequence (capture (any (if-not ":" :rune))) ":")
     :not-eol
     (sequence (not "\n") :rune)
     :rest
@@ -70,15 +70,18 @@
           (cmt (sequence "-" :eol) ,(fn [&] @{:kind :list...}))
           (cmt (sequence "- " :rest) ,(fn [value] @{:kind :list-value :value value}))
           (cmt (sequence "> " :rest) ,(fn [value] @{:kind :multi-string :value value}))
-          (cmt (sequence :inline-array :eol) ,(fn [value] @{:kind :inline-list :value value}))
-          (cmt (sequence :inline-dict :eol) ,(fn [value] @{:kind :inline-dict :value value}))
+          (if (set "[{")
+            (choice
+              (cmt (sequence :inline-array :eol) ,(fn [value] @{:kind :inline-list :value value}))
+              (cmt (sequence :inline-dict :eol) ,(fn [value] @{:kind :inline-dict :value value}))
+              (cmt :rest ,(fn [value] @{:kind :malformed-inline-value :value value}))))
           (cmt (sequence :key :eol) ,(fn [key] @{:kind :key... :key key}))
-          (cmt (sequence :key " " :rest) ,(fn [key rest] @{:kind :key-value :key key :value rest}))
+          (cmt (sequence :key " " :rest) ,(fn [key value] @{:kind :key-value :key key :value value}))
           (cmt :eol ,(fn [] @{:kind :blank}))
-          (cmt :rest ,(fn [rest] @{:kind :bad-line :value rest}))))
+          (cmt :rest ,(fn [value] @{:kind :malformed-line :value value}))))
       ,|(do (put $2 :line $0)
-            (put $2 :indent $1)
-            $2))
+          (put $2 :indent $1)
+          $2))
     :main
     (sequence (any :line) (not 1))})
 
@@ -149,7 +152,7 @@
 # (setdyn :yydebug stderr)
 (def parser-tables (yacc/compile parser-grammar))
 
-(defn parse
+(defn decode
   [prog]
   (def tokens (tokenize prog))
   #(print "===")
@@ -157,9 +160,92 @@
   #(print "===")
   (yacc/parse parser-tables tokens))
 
+(defn- prin-indent
+  [depth]
+  (def buf @"")
+  (repeat depth
+    (buffer/push-string buf " "))
+  (prin buf))
+
+(var print-linev nil)
+
+(defn print-dict
+  [d depth]
+  (if (empty? d)
+    (do
+      (prin-indent depth)
+      (print "{}"))
+    (each k (sorted (keys d))
+      (def v (d k))
+      (def sk (if (bytes? k) k (string k)))
+      (if (string/find "\n" sk)
+        (do
+          (var first true)
+          (each line (string/split "\n" sk)
+            (unless first
+              (print))
+            (set first false)
+            (prin-indent depth)
+            (prin line ":")))
+        (do
+          (prin-indent depth)
+          (prin sk ":")))
+      (print-linev v depth))))
+
+(defn print-indexed
+  [ind depth]
+  (if (empty? ind)
+    (do
+      (prin-indent depth)
+      (print "[]"))
+    (each v ind
+      (prin-indent depth)
+      (prin "-")
+      (print-linev v depth))))
+
+(set
+  print-linev
+  (fn print-linev
+    [v depth]
+    (cond
+      (indexed? v)
+      (do
+        (print)
+        (print-indexed v (+ depth 2)))
+      (dictionary? v)
+      (do
+        (print)
+        (print-dict v (+ depth 2)))
+      (and (bytes? v)
+           (not (string/find "\n" v)))
+      (print " " v)
+      (bytes? v)
+      (do
+        (print)
+        (each line (string/split "\n" v)
+          (prin-indent (+ depth 2))
+          (print "> " line)))
+      (print-linev (string v) depth))))
+
+(defn print
+  [v &opt depth]
+  (default depth 0)
+  (cond
+    (dictionary? v)
+    (print-dict v depth)
+    (indexed? (print-indexed v depth))))
+
+(defn encode
+  [v &opt depth]
+  (def buf @"")
+  (with-dyns [:out buf]
+    (print v depth))
+  buf)
+
+# (prin (encode ~{:a :b :c :d}))
 # TODO test suite.
 #(pp (parse ```
 #-
-#  [1,{a: 2, c: 3}]
+#  {a: 2, c: 3}
 #```))
 
