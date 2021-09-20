@@ -28,10 +28,12 @@
     (choice :1byte-rune :2byte-rune :3byte-rune :4byte-rune)
 
     # helpers
-    :inline-ws (any (set " \t\f\v"))
+    :inline-ws
+    (any (set " \t\f\v"))
     :indent
     (cmt (capture (any " ")) ,length)
-    :nl (choice "\r\n" "\n" "\r")
+    :nl
+    (choice "\r\n" "\n" "\r")
     :eol
     (choice :nl (not 1))
     :not-eol
@@ -176,8 +178,13 @@
 (def parser-tables (yacc/compile parser-grammar))
 
 (defn decode
-  [prog]
-  (def tokens (tokenize prog))
+  "Decode a NestedText document returning one of
+  [:syntax-error nil] on unexpected EOF.
+  [:syntax-error {:kind token-kind :line line}] on unexpected token.
+  [:ok value] on success.
+  "
+  [text]
+  (def tokens (tokenize text))
   (yacc/parse parser-tables tokens))
 
 (defn- prin-indent
@@ -191,9 +198,7 @@
 
 (defn- should-use-multiline
   [s]
-  # This is inefficient.
-  # We should split unicode runes and
-  # look for these characters.
+  # This is inefficient and probably over conservative.
   (or (empty? s)
       (string/has-prefix? " " s)
       (string/find "\n" s)
@@ -270,6 +275,7 @@
       (print-linev (string v) depth force-multiline))))
 
 (defn print
+  "Print a value as a NestedText document."
   [v &opt depth]
   (default depth 0)
   (cond
@@ -281,6 +287,7 @@
     (print-multiline-string v depth)))
 
 (defn encode
+  "Encode a value as a NestedText document buffer."
   [v &opt depth]
   (def buf @"")
   (with-dyns [:out buf]
