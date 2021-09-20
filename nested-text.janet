@@ -29,7 +29,7 @@
 
     # helpers
     :indent
-    (capture (any " "))
+    (cmt (capture (any " ")) ,length)
     :eol
     (choice "\n" (not 1))
     :key
@@ -86,15 +86,15 @@
 (defn- tokenize
   [text]
   (def tokens @[])
-  (def indents @[""])
+  (def indents @[0])
   (each line (peg/match tokenizer text)
     (def [indent token] line)
     (unless (or (= (token :kind) :blank)
                 (= (token :kind) :comment))
-      (case (cmp (length indent) (length (last indents)))
+      (case (cmp indent (last indents))
         -1
         (do
-          (while (< (length indent) (length (last indents)))
+          (while (< indent (last indents))
             (array/push tokens @{:kind :dedent :line (token :line)})
             (array/pop indents))
           (array/push tokens token))
