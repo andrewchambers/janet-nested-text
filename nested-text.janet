@@ -246,7 +246,7 @@
     (each v ind
       (prin-indent depth)
       (prin "-")
-      (print-linev v depth))))
+      (print-linev v depth false))))
 
 (defn- print-multiline-string
   [s depth]
@@ -257,7 +257,7 @@
 (set
   print-linev
   (fn print-linev
-    [v depth &opt force-multiline]
+    [v depth force-multiline]
     (cond
       (indexed? v)
       (do
