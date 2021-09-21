@@ -144,8 +144,14 @@
                (multi-string) ,identity)
 
      (multi-string (:multi-string) ,|(buffer/push-string @"" ($0 :value))
-                   (multi-string :multi-string) ,|(do (buffer/push-string $0 "\n")
+                   (multi-string :multi-string) ,|(do
+                                                    (buffer/push-string $0 "\n")
                                                     (buffer/push-string $0 ($1 :value))))
+
+     (multi-key (:multi-key) ,|(buffer/push-string @"" ($0 :key))
+                (multi-key :multi-key) ,|(do
+                                           (buffer/push-string $0 "\n")
+                                           (buffer/push-string $0 ($1 :key))))
 
      (inline-value (:inline-list) ,|($0 :value)
                    (:inline-dict) ,|($0 :value))
@@ -161,9 +167,6 @@
 
      (list (list-item) ,array
            (list list-item) ,|(array/push $0 $1))
-
-     (multi-key (:multi-key) ,|($0 :key)
-                (multi-key :multi-key) ,|(string $0 "\n" ($1 :key)))
 
      (dict-item (:key-value) ,|[($0 :key) ($0 :value)]
                 (:key...) ,|[($0 :key) ""]
