@@ -2,8 +2,7 @@
 
 A janet implementation of [NestedText](https://nestedtext.org).
 
-For context, NestedText is an alternative to Yaml that aims to be
-simpler.
+NestedText is an alternative to Yaml that aims to be simpler.
 
 ## Example
 
